@@ -46,7 +46,7 @@
                   'build'
                   openshiftBuild(buildConfig: '${NAME}', showBuildLogs: 'true')
                   stage 'deploy'
-                  openshiftDeploy(deploymentConfig: '${NAME}')\n}"
+                  openshiftDeploy(deploymentConfig: '${NAME}')}"
                 }
               }
             }
