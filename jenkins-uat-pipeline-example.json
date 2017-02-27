@@ -1,0 +1,235 @@
+{
+  "kind": "Template",
+  "apiVersion": "v1",
+  "metadata": {
+    "name": "aspnet-core-example",
+    "annotations": {
+      "description": "An example ASP.NET Core 1.0 application with no database",
+      "iconClass": "icon-aspnet",
+      "tags": "instant-app,aspnet,aspnetcore1.0,.net"
+    }
+  },
+  "objects": [
+    {
+       "kind": "BuildConfig",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": "sample-pipeline",
+                "creationTimestamp": null,
+                "labels": {
+                    "name": "sample-pipeline"
+                },
+                "annotations": {
+                    "pipeline.alpha.openshift.io/uses": "[{\"name\": \"${NAME}\", \"namespace\": \"\", \"kind\": \"DeploymentConfig\"}]"
+                }
+            },
+            "spec": {
+                "triggers": [
+                    {
+                        "type": "GitHub",
+                        "github": {
+                            "secret": "secret101"
+                        }
+                    },
+                    {
+                        "type": "Generic",
+                        "generic": {
+                            "secret": "secret101"
+                        }
+                    }
+                ],
+              "strategy": {
+                "type": "JenkinsPipeline",
+                "jenkinsPipelineStrategy": {
+                  "jenkinsfile": "node {\nstage 'build'\nopenshiftBuild(buildConfig: '${NAME}', showBuildLogs: 'true')\nstage 'deploy'\nopenshiftDeploy(deploymentConfig: '${NAME}')\n}"
+                }
+              }
+            }
+        },
+    {
+      "kind": "Service",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "${NAME}",
+        "annotations": { "description": "Exposes and load balances the application pods" }
+      },
+      "spec": {
+        "ports": [
+          {
+            "name": "web",
+            "port": 5000,
+            "targetPort": 5000
+          }
+        ],
+        "selector": { "name": "${NAME}" }
+      }
+    },
+    {
+      "kind": "Route",
+      "apiVersion": "v1",
+      "metadata": { "name": "${NAME}" },
+      "spec": {
+        "host": "${APPLICATION_HOSTNAME}",
+        "to": {
+          "kind": "Service",
+          "name": "${NAME}"
+        }
+      }
+    },
+    {
+      "kind": "ImageStream",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "${NAME}",
+        "annotations": { "description": "Keeps track of changes in the application image" }
+      }
+    },
+    {
+      "kind": "BuildConfig",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "${NAME}",
+        "annotations": { "description": "Defines how to build the application" }
+      },
+      "spec": {
+        "source": {
+          "type": "Git",
+          "git": {
+            "uri": "${SOURCE_REPOSITORY_URL}",
+            "ref": "${SOURCE_REPOSITORY_REF}"
+          },
+          "contextDir": "${CONTEXT_DIR}"
+        },
+        "strategy": {
+          "type": "Source",
+          "sourceStrategy": {
+            "from": {
+              "kind": "DockerImage",
+              "name": "click2cloud/aspnet-core-centos7:latest"
+            },
+            "forcePull": false,
+            "incremental": true
+          }
+        },
+        "output": {
+          "to": {
+            "kind": "ImageStreamTag",
+            "name": "${NAME}:latest"
+          }
+        },
+        "triggers": [
+          { "type": "ConfigChange" },
+          { "type": "ImageChange" },
+          {
+            "type": "GitHub",
+            "github": { "secret": "${GITHUB_WEBHOOK_SECRET}" }
+          },
+          {
+            "type": "Generic",
+            "generic": { "secret": "${GENERIC_WEBHOOK_SECRET}" }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "DeploymentConfig",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "${NAME}",
+        "annotations": { "description": "Defines how to deploy the application server" }
+      },
+      "spec": {
+        "strategy": { "type": "Rolling" },
+        "triggers": [
+          {
+            "type": "ImageChange",
+            "imageChangeParams": {
+              "automatic": true,
+              "containerNames": [ "${NAME}" ],
+              "from": {
+                "kind": "ImageStreamTag",
+                "name": "${NAME}:latest"
+              }
+            }
+          },
+          { "type": "ConfigChange" }
+        ],
+        "replicas": 1,
+        "selector": { "name": "${NAME}" },
+        "template": {
+          "metadata": {
+            "name": "${NAME}",
+            "labels": { "name": "${NAME}" }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "${NAME}",
+                "image": "${NAME}",
+                "ports": [ { "containerPort": 5000 } ],
+                "resources": {
+                  "limits": {
+                    "memory": "${MEMORY_LIMIT}"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "parameters": [
+    {
+      "name": "NAME",
+      "displayName": "Name",
+      "description": "The name assigned to all of the frontend objects defined in this template.",
+      "value": "aspnet-core-uat-pipeline-example",
+      "required": true
+    },
+    {
+      "name": "MEMORY_LIMIT",
+      "displayName": "Memory Limit",
+      "description": "Maximum amount of memory the .NET Core container can use.",
+      "value": "512Mi",
+      "required": true
+    },
+    {
+      "name": "SOURCE_REPOSITORY_URL",
+      "displayName": "Git Repository URL",
+      "description": "The URL of the repository with your application source code",
+      "value": "https://github.com/prasannaRgen/prasannaCoreApi.git",
+      "required": true
+    },
+    {
+      "name": "SOURCE_REPOSITORY_REF",
+      "displayName": "Git Reference",
+      "description": "Set this to a branch name, tag or other ref of your repository if you are not using the default branch"
+    },
+    {
+      "name": "CONTEXT_DIR",
+      "displayName": "Context Directory",
+      "description": "Set this to the relative path to your project if it is not in the root of your repository"
+    },
+    {
+      "name": "APPLICATION_HOSTNAME",
+      "displayName": "Application Hostname",
+      "description": "The exposed hostname that will route to the .NET service, if left blank a value will be defaulted."
+    },
+    {
+      "name": "GITHUB_WEBHOOK_SECRET",
+      "displayName": "GitHub Webhook Secret",
+      "description": "A secret string used to configure the GitHub webhook",
+      "generate": "expression",
+      "from": "[a-zA-Z0-9]{40}"
+    },
+    {
+      "name": "GENERIC_WEBHOOK_SECRET",
+      "displayName": "Generic Webhook Secret",
+      "description": "A secret string used to configure the Generic webhook.",
+      "generate": "expression",
+      "from": "[a-zA-Z0-9]{40}"
+    }
+  ],
+  "labels": { "template": "aspnet-core-example" }
+}
